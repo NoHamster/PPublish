@@ -36,9 +36,14 @@ def getNameStart(string):
 class File:
 	def __init__(self, path):
 		self.path=path
-		self.valid=os.path.isfile(path)
+		self.rehash()
+
+	def rehash(self):
+		self.valid=os.path.isfile(self.path)
 		if self.valid:
 			self.md5=self.hash()
+		else:
+			self.md5 = None
 
 	def hash(self):
 		with open(self.path, "rb") as f:
@@ -109,7 +114,7 @@ class RenameTrack:
 
 class RenameAlbum:
 	def __init__(self, new_name):
-		self.new_name=new_name
+		self.new_name=new_name.deepcopy()
 	def apply(self, state):
 		state["Album"]=self.new_name
 		return False
@@ -117,7 +122,7 @@ class RenameAlbum:
 class ChangePath:
 	def __init__(self, module, path):
 		self.module=module
-		self.path=path
+		self.path=path.deepcopy()
 	def apply(self, state):
 		state[self.module+"_path"]=self.path
 		return False
@@ -172,17 +177,17 @@ class ChangeRecTime:
 		return False
 
 class UpdateVideo:
-	def __init__(self, File):
-		self.file=File
+	def __init__(self, file):
+		self.file=file.copy()
 	def apply(self, state):
 		state["Video"]=self.file
 		return False
 
 class Updatemp3tags:
 	def __init__(self, tags):
-		self.tags = tags
+		self.tags = tags.deepcopy()
 	def apply(self, state):
-		state["tags"]=copy.copy(self.tags)
+		state["tags"]=self.tags
 		return False
 
 class Reorder:
@@ -416,7 +421,7 @@ def conf_detect(conf):
 	#album name
 	setName(conf, getName())
 	dir_add(conf, True, os.curdir)
-	conf["tags"]["Cover"]  = getCover()
+	conf["tags"]["Cover"] = getCover()
 	conf["Video"] = getVideo()
 	print("Album name: " + new_state["Album"])
 	print("Found {} Songs".format(len(conf["Tracks"])))
@@ -425,6 +430,12 @@ def conf_detect(conf):
 	if conf["Video"]:
 		print("Video: " + conf["Video"].path)
 	print("Album length: " + Time_str(Tracks_length(conf["Tracks"])))
+
+def conf_check_file(conf, field, val=None):
+	if conf.get(field, None):
+		conf[field].rehash()
+	else:
+		conf[field] = val
 
 def conf_check(conf):
 	# check monitored directories
@@ -438,6 +449,10 @@ def conf_check(conf):
 		if not track.valid:
 			print(track.name + " became invalid")
 			track_rm(conf, track, False)
+
+	# conf_check_file(conf["tags"], "Cover", getCover())
+	# conf_check_file(conf, "Video", getVideo())
+
 
 
 def Rename(old_name, new_name):
@@ -1418,7 +1433,7 @@ def getDiff(old_state, new_state):
 			if new_state[module.name+"_path"]!=old_state[module.name+"_path"]:
 				diff.append(ChangePath(module.name, new_state[module.name+"_path"]))
 
-	if old_state["Video"]!=new_state["Video"]:
+	if old_state["Video"].hash()!=new_state["Video"].md5:
 		diff.append(UpdateVideo(new_state["Video"]))
 
 	for track in old_state["Tracks"]:
