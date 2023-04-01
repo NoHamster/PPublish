@@ -9,6 +9,7 @@ import pickle
 import re
 import audioread
 from deepdiff import DeepDiff
+import copy
 
 current_states = {}
 new_state = {}
@@ -114,7 +115,7 @@ class RenameTrack:
 
 class RenameAlbum:
 	def __init__(self, new_name):
-		self.new_name=new_name.deepcopy()
+		self.new_name=copy.copy(new_name)
 	def apply(self, state):
 		state["Album"]=self.new_name
 		return False
@@ -122,7 +123,7 @@ class RenameAlbum:
 class ChangePath:
 	def __init__(self, module, path):
 		self.module=module
-		self.path=path.deepcopy()
+		self.path=copy.copy(path)
 	def apply(self, state):
 		state[self.module+"_path"]=self.path
 		return False
@@ -178,14 +179,14 @@ class ChangeRecTime:
 
 class UpdateVideo:
 	def __init__(self, file):
-		self.file=file.copy()
+		self.file=copy.deepcopy(file)
 	def apply(self, state):
 		state["Video"]=self.file
 		return False
 
 class Updatemp3tags:
 	def __init__(self, tags):
-		self.tags = tags.deepcopy()
+		self.tags = copy.deepcopy(tags)
 	def apply(self, state):
 		state["tags"]=self.tags
 		return False
@@ -450,8 +451,8 @@ def conf_check(conf):
 			print(track.name + " became invalid")
 			track_rm(conf, track, False)
 
-	# conf_check_file(conf["tags"], "Cover", getCover())
-	# conf_check_file(conf, "Video", getVideo())
+	conf_check_file(conf["tags"], "Cover", getCover())
+	conf_check_file(conf, "Video", getVideo())
 
 
 
@@ -1433,7 +1434,7 @@ def getDiff(old_state, new_state):
 			if new_state[module.name+"_path"]!=old_state[module.name+"_path"]:
 				diff.append(ChangePath(module.name, new_state[module.name+"_path"]))
 
-	if old_state["Video"].hash()!=new_state["Video"].md5:
+	if old_state["Video"]!=new_state["Video"]:
 		diff.append(UpdateVideo(new_state["Video"]))
 
 	for track in old_state["Tracks"]:
