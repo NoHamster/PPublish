@@ -28,7 +28,9 @@ def realpath(path):
 def getFile(path):
 	return os.path.basename(path)
 
+#TODO: fix numbering detection
 def getNameStart(string):
+	return 0
 	match = re.search('[a-zA-Z0-9]{2}[^). ]+', string)
 	if match==None:
 		return 0
@@ -184,7 +186,7 @@ class UpdateVideo:
 		state["Video"]=self.file
 		return False
 
-class Updatemp3tags:
+class UpdateTags:
 	def __init__(self, tags):
 		self.tags = copy.deepcopy(tags)
 	def apply(self, state):
@@ -244,7 +246,7 @@ def getTrackByName(Tracks, name):
 def getTrackByPath(Tracks, path):
 	return getTrackAttribute(Tracks, lambda t: t.path==path)
 
-audio_fmt = ["mp3", "wav", "wma", "flac"]
+audio_fmt = ["mp3", "wav", "wma", "flac", "ogg"]
 image_fmt = ["png", "bmp", "jpg", "tiff"]
 video_fmt = ["avi", "mp4", "flv", "mkv"]
 
@@ -397,8 +399,10 @@ def getVideo():
 			return File(file)
 	return getCover()
 
-default_paths = { "mp3_path" : "",
+default_paths = { "mp3_path" : " Mp3",
 				  "wav_path" : " HQ",
+				  "flac_path": "",
+				  "raw_path" : " RAW",
 				  "video_path" : ".mp4",
 				  "full_path" : ".wav"
 				  }
@@ -604,9 +608,9 @@ class ffmpeg:
 			cmd += " -" +attri
 
 		cmd += " \""+realpath(self.output.path) +"\" -y"
-		print("------DEBUG-------")
-		print(cmd)
-		print("------------------")
+		#print("------DEBUG-------")
+		#print(cmd)
+		#print("------------------")
 		os.system(cmd)
 
 class module:
@@ -645,7 +649,7 @@ class module:
 class module_folder(module):
 
 	def delete(self, track):
-		path = join(self.path,self.getName(track.index,track.name))
+		path = join(self.path,self.getName(track))
 		if path in self.state["reserved"]:
 			self.state["reserved"].remove(path)
 		Delete(path)
@@ -661,13 +665,13 @@ class module_folder(module):
 			Reset(self)
 		else:
 			for track in reversed(self.Tracks):
-				if not self.getName(track.index, track.name) in os.listdir(realpath(self.path)):
+				if not self.getName(track) in os.listdir(realpath(self.path)):
 					self.Tracks.remove(track)
-					path = join(self.path,self.getName(track.index,track.name))
+					path = join(self.path,self.getName(track))
 					if path in self.state["reserved"]:
 						self.state["reserved"].remove(path)
 
-			track_names = [self.getName(t.index, t.name) for t in self.Tracks]
+			track_names = [self.getName(t) for t in self.Tracks]
 			for file in os.listdir(realpath(self.path)):
 				if not file in track_names:
 					Junkify(join(self.path, file))
@@ -684,12 +688,12 @@ class module_folder(module):
 			print("[ERROR] Could not find Track in state hash: "+update.md5)
 			return True
 
-		old_name = self.getName(track.index,track.name)
+		old_name = self.getName(track)
 		if not old_name in os.listdir(realpath(self.path)):
 			print("[ERROR] Could not find Track in folder \""+track.path+"\"")
 			return True
 
-		new_path = self.getName(track.index, update.new_path)
+		new_path = self.getName(track)
 		self.Rename(old_name, new_path)
 
 	def handleReorder(self, update):
@@ -697,12 +701,12 @@ class module_folder(module):
 			return True
 		print(track)
 
-		old_name = self.getName(track.index,track.name)
+		old_name = self.getName(track)
 		if not old_name in os.listdir(realpath(self.path)):
 			print("[ERROR] Could not find Track in folder \""+old_name+"\"")
 			return True
 
-		new_name = self.getName(update.index,track.name)
+		new_name = self.getName(update)
 		self.Rename(old_name, new_name)
 
 	def handleInit(self, update):
@@ -727,7 +731,7 @@ class module_folder(module):
 		f_input.map=["a"]
 
 		output=self.getOutput(track)
-		output.path=join(self.path, self.getName(track.index, track.name))
+		output.path=join(self.path, self.getName(track))
 
 		ffmpeg_inst.inputs.append(f_input)
 		ffmpeg_inst.output = output
@@ -739,24 +743,23 @@ class module_folder(module):
 		if not output.path in self.state["reserved"]:
 			self.state["reserved"].append(output.path)
 
-class mp3(module_folder):
+class tagged(module_folder):
 
 	def load(self,):
 		super().load()
 		self.path = self.state[self.name+"_path"]
 		self.Cover = self.state["tags"]["Cover"]
 		self.tags = self.state["tags"]
-
+	
 	def getOutput(self, track):
 		ffmpeg_out = ffmpeg_output()
-		ffmpeg_output.attributes = ["id3v2_version 3",
-									f"metadata title=\"{track.name}\"",
-									f"metadata track=\"{track.index}\"",
-									f"metadata album_artist=\"{self.tags['Artist']}\"",
-									f"metadata date=\"{self.tags['Year']}\"",
-									f"metadata album=\"{self.Album}\"",
-									f"metadata genre=\"{self.tags['Genre']}\"",
-									f"metadata artist=\"{','.join(self.tags['feat'])}\""]
+		ffmpeg_output.attributes = [f"metadata title=\"{track.name}\"",
+				 f"metadata track=\"{track.index}\"",
+				 f"metadata album_artist=\"{self.tags['Artist']}\"",
+				 f"metadata date=\"{self.tags['Year']}\"",
+				 f"metadata album=\"{self.Album}\"",
+				 f"metadata genre=\"{self.tags['Genre']}\"",
+				 f"metadata artist=\"{','.join([self.tags['Artist']] + self.tags['feat'])}\""]
 
 		return ffmpeg_output
 
@@ -781,9 +784,6 @@ class mp3(module_folder):
 		for track in self.retag:
 			self.ReTag(track)
 
-	def description(self):
-		return "Creates tagged mp3 files of file with integraded Album Cover"
-
 	def handle(self, task, update):
 		if task == "RenameTrack":
 			if (res := self.handleRename(update)):
@@ -806,7 +806,7 @@ class mp3(module_folder):
 		elif task == "DeleteTrack":
 			self.delete(update.track)
 
-		elif task == "Updatemp3tags" or task=="RenameAlbum":
+		elif task == "UpdateTags" or task=="RenameAlbum":
 			for track in self.Tracks:
 				self.retag_track(track)
 
@@ -825,13 +825,10 @@ class mp3(module_folder):
 
 		return False
 
-	def getName(self, index, name):
-		return str(index)+". "+name+".mp3"
-
 
 	def ReTag(self, track):
 		# rename old track
-		name=self.getName(track.index,track.name)
+		name=self.getName(track)
 		tmp_path = join(self.path, "tmp_"+name)
 		if not name in os.listdir(realpath(self.path)):
 			print("[ERROR] could not find Track \""+track.name+"\"")
@@ -846,13 +843,11 @@ class mp3(module_folder):
 		f_input.map=["a"]
 
 		output=self.getOutput(track)
-		output.attributes.append("c:a copy")
-		output.path=join(self.path, self.getName(track.index, track.name))
+		output.attributes.append("c copy")
+		output.path=join(self.path, self.getName(track))
 
 		ffmpeg_inst.inputs.append(f_input)
 		ffmpeg_inst.output = output
-
-		self.Render_add_cover(ffmpeg_inst)
 
 		ffmpeg_inst.run()
 
@@ -870,77 +865,65 @@ class mp3(module_folder):
 				cover.map=["v"]
 				inst.inputs.append(cover)
 
+
+class mp3(tagged):
+
+	def getName(self, track):
+		return str(track.index) + ". " + track.name + ".mp3"
+
+	def description(self):
+		return "Creates tagged Mp3 files with integraded Album Cover"
+
 	def Render_extend(self, inst):
 		self.Render_add_cover(inst)
 
 		# mp3 codec
-		inst.output.attributes+=["b:a 320k", "acodec libmp3lame"]
+		inst.output.attributes+=["q:a 6", "acodec libmp3lame", "id3v2_version 3"]
 
+class flac(tagged):
 
-class wav(module_folder):
-
-	def load(self,):
-		super().load()
-		self.path = self.state[self.name+"_path"]
-		self.Cover = self.state["tags"]["Cover"]
-		self.tags = self.state["tags"]
+	def getName(self, track):
+		return str(track.index) + ". " + track.name + ".flac"
 
 	def description(self):
-		return "Creates high quality Wav output of album"
+		return "Creates tagged Flac files with integraded Album Cover"
 
-	def handle(self, task, update):
-		if task == "RenameTrack":
-			self.handleRename(update)
+	def Render_extend(self, inst):
+		self.Render_add_cover(inst)
 
-		elif task == "ChangePath":
-			self.handleChangePath(update)
+		# flac codec
+		inst.output.attributes+=["c:a flac", "disposition:v attached_pic"]
 
-		elif task == "NewTrack":
-			self.Render(update.track)
+class raw(tagged):
 
-		elif task == "UpdateTrack":
-			if not (track := self.getMd5(update.md5)):
-				return True
-			self.Render(track)
+	def getName(self, track):
+		return str(track.index) + ". " + track.name + os.path.splitext(track.path)[1]
 
-		elif task == "DeleteTrack":
-			self.delete(update.track)
+	def description(self):
+		return "Uses original formats adds tags"
 
-		elif task == "Reorder":
-			track = getTrackByMD5(self.Tracks, update.md5)
-			if track == None:
-				print("[ERROR] Could not find track! hash: "+update.md5)
-				return True
-
-			old_name = self.getName(track.index,track.name)
-			if not old_name in os.listdir(realpath(self.path)):
-				print("[ERROR] Could not find Track in folder \""+old_name+"\"")
-				return True
-
-			track.index=update.index
-			new_name = self.getName(track.index,track.name)
-			Rename(join(self.path,old_name), join(self.path, new_name))
-
-		elif task == "Initilize":
-			try:
-				os.mkdir(update.path)
-			except:
-				for i in os.listdir(realpath(update.path)):
-					Junkify(join(update.path,i))
-
-		elif task == "Clear":
-			clear()
+	def Render_extend(self, inst):
+		ext = os.path.splitext(inst.output.path)[1]
+		if ext == ".flac":
+			self.Render_add_cover(inst)
+			inst.output.attributes+=["disposition:v attached_pic"]
+		elif ext == ".mp3":
+			self.Render_add_cover(inst)
+			inst.output.attributes+=["id3v2_version 3"]
+		inst.output.attributes+=["c:a copy"]
 
 
-		return False
 
-	def getName(self, index, name):
-		return str(index)+". "+name+".wav"
+class wav(tagged):
 
-	def getOutput(self, track):
-		out = ffmpeg_output()
-		out.attributes=["ar 44100", "ac 2"]
-		return out
+	def getName(self, track):
+		return str(track.index) + ". " + track.name + ".wav"
+
+	def description(self):
+		return "Creates tagged Wave files"
+
+	def Render_extend(self, inst):
+		inst.output.attributes+= ["ar 44100", "ac 2"]
 
 class module_hash(module):
 
@@ -1378,7 +1361,7 @@ void loop(){};""")
 
 
 
-modules = [ mp3(), wav(), full(), description(), tl_sketch(), video() ]
+modules = [ raw(), mp3(), flac(), wav(), full(), description(), tl_sketch(), video() ]
 
 def conf_default(conf):
 	conf.clear()
@@ -1408,7 +1391,7 @@ def conf_default(conf):
 
 	return conf
 
-mappings = {"tags" : Updatemp3tags,
+mappings = {"tags" : UpdateTags,
 			"Album" : RenameAlbum,
 			"rec_time" : ChangeRecTime,
 			}
@@ -1665,6 +1648,8 @@ class cmd_set_vars(cmd):
 
 	def run(self, args):
 		arg = " ".join(args[1:])
+		if arg == "$None":
+			arg=""
 		if len(args)>1:
 			found = False
 			for var in self.var_set:
@@ -1961,12 +1946,14 @@ while run:
 				Found=True
 
 		if not Found:
-			for module in modules:
-				if cmd == module.name:
-					if (error := module_run(current_states[module.name], new_state, module)):
-						print("[ERROR] Module falied to run: " +str(error))
-					Found=True
-					break
+			for cmd in inp:
+				print(cmd)
+				for module in modules:
+					if cmd == module.name:
+						if (error := module_run(current_states[module.name], new_state, module)):
+							print("[ERROR] Module falied to run: " +str(error))
+						Found=True
+						break
 
 	if not Found:
 			print("[ERROR] Unknown command \"" + cmd + "\"")
