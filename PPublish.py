@@ -913,16 +913,70 @@ class raw(tagged):
 
 
 
-class wav(tagged):
+class wav(module_folder):
 
-	def getName(self, track):
-		return str(track.index) + ". " + track.name + ".wav"
+	def load(self,):
+		super().load()
+		self.path = self.state[self.name+"_path"]
+		self.Cover = self.state["tags"]["Cover"]
+		self.tags = self.state["tags"]
 
 	def description(self):
-		return "Creates tagged Wave files"
+		return "Creates high quality Wav output of album"
 
-	def Render_extend(self, inst):
-		inst.output.attributes+= ["ar 44100", "ac 2"]
+	def handle(self, task, update):
+		if task == "RenameTrack":
+			self.handleRename(update)
+
+		elif task == "ChangePath":
+			self.handleChangePath(update)
+
+		elif task == "NewTrack":
+			self.Render(update.track)
+
+		elif task == "UpdateTrack":
+			if not (track := self.getMd5(update.md5)):
+				return True
+			self.Render(track)
+
+		elif task == "DeleteTrack":
+			self.delete(update.track)
+
+		elif task == "Reorder":
+			track = getTrackByMD5(self.Tracks, update.md5)
+			if track == None:
+				print("[ERROR] Could not find track! hash: "+update.md5)
+				return True
+
+			old_name = self.getName(track.index,track.name)
+			if not old_name in os.listdir(realpath(self.path)):
+				print("[ERROR] Could not find Track in folder \""+old_name+"\"")
+				return True
+
+			track.index=update.index
+			new_name = self.getName(track.index,track.name)
+			Rename(join(self.path,old_name), join(self.path, new_name))
+
+		elif task == "Initilize":
+			try:
+				os.mkdir(update.path)
+			except:
+				for i in os.listdir(realpath(update.path)):
+					Junkify(join(update.path,i))
+
+		elif task == "Clear":
+			clear()
+
+
+		return False
+
+	def getName(self, index, name):
+		return str(index)+". "+name+".wav"
+
+	def getOutput(self, track):
+		out = ffmpeg_output()
+		out.attributes=["ar 44100", "ac 2"]
+		return out
 
 class module_hash(module):
 
