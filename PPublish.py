@@ -30,8 +30,10 @@ def getFile(path):
 
 #TODO: fix numbering detection
 def getNameStart(string):
-	match = re.search('[0-9]+[\).] ', string)
+	match = re.search('[0-9]+[\).] ', string.strip())
 	if match==None:
+		return 0
+	if match.start()!=0:
 		return 0
 	return match.end()
 
@@ -863,6 +865,7 @@ class tagged(module_folder):
 				cover.streams.append(self.Cover.path)
 				cover.map=["v"]
 				inst.inputs.append(cover)
+				inst.output.attributes+=["vf \"scale=1024:1024\""]
 
 
 class mp3(tagged):
@@ -918,8 +921,6 @@ class wav(module_folder):
 	def load(self,):
 		super().load()
 		self.path = self.state[self.name+"_path"]
-		self.Cover = self.state["tags"]["Cover"]
-		self.tags = self.state["tags"]
 
 	def description(self):
 		return "Creates high quality Wav output of album"
@@ -1627,7 +1628,7 @@ class Var_File(Var_get_set):
 
 class Var_Name(Var_get_set):
 	def set(self, val):
-		setName(val)
+		setName(new_state, val)
 
 # set simple fiels
 var_set = { "Cover"   : Var_File(new_state["tags"], "Cover"),
