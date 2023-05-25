@@ -30,11 +30,10 @@ def getFile(path):
 
 #TODO: fix numbering detection
 def getNameStart(string):
-	return 0
-	match = re.search('[a-zA-Z0-9]{2}[^). ]+', string)
+	match = re.search('[0-9]+[\).] ', string)
 	if match==None:
 		return 0
-	return match.start()
+	return match.end()
 
 class File:
 	def __init__(self, path):
@@ -608,9 +607,9 @@ class ffmpeg:
 			cmd += " -" +attri
 
 		cmd += " \""+realpath(self.output.path) +"\" -y"
-		#print("------DEBUG-------")
-		#print(cmd)
-		#print("------------------")
+		print("------DEBUG-------")
+		print(cmd)
+		print("------------------")
 		os.system(cmd)
 
 class module:
